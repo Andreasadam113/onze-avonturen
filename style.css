@@ -246,6 +246,15 @@ header p {
   font-size: 1.4rem;
 }
 
+.load-status {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--brown);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
 /* ── Kaarten-grid ── */
 .grid {
   max-width: 900px;

@@ -51,15 +51,14 @@
   let filter = 'all';
   let items = [];
   let isLoading = false;
+  let loadStatus = '';
 
   // ── JSONBin lezen ──
   async function load() {
     if (isLoading) return;
     isLoading = true;
-    const grid = document.getElementById('grid');
-    if (items.length === 0) {
-      grid.innerHTML = `<div class="empty"><span>🌿</span>Laden…</div>`;
-    }
+    loadStatus = items.length === 0 ? 'Laden…' : 'Bijwerken…';
+    render();
     try {
       const res  = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
       const data = await res.json();
@@ -70,6 +69,7 @@
       console.error('Laden mislukt', e);
     }
     isLoading = false;
+    loadStatus = '';
     render();
   }
 
@@ -148,7 +148,7 @@
     const done  = items.filter(i => i.done).length;
     const total = items.length;
     document.getElementById('stats').innerHTML =
-      `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd`;
+      `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd${loadStatus ? ` <span class="load-status">${loadStatus}</span>` : ''}`;
 
     let visible = items;
     if (filter === 'todo') visible = items.filter(i => !i.done);
