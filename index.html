@@ -135,6 +135,10 @@
   }
 
   async function deleteItem(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    const confirmed = confirm(`Weet je zeker dat je “${item.title}” wilt verwijderen?`);
+    if (!confirmed) return;
     items = items.filter(i => i.id !== id);
     render();
     await save();
