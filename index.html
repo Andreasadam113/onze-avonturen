@@ -35,33 +35,48 @@
 </div>
 
 <div class="stats" id="stats"></div>
-
 <div class="grid" id="grid"></div>
 
 <footer>Gemaakt met ❤︎ voor ons</footer>
 
 <script>
+  const BIN_ID  = '69e691e1aaba8821971d555a';
+  const API_KEY = '$2a$10$5zWkFfN8BCbZoTyjdETWFe1dRyuqXHXJ8wuONX8NrlohIH5ajeeXq';
+  const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+  const HEADERS = { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY };
+
   const EMOJIS = ['🏕️','🚗','🍽️','🌲','🏖️','🎡','🎬','🧁','🚴','🌅','⛵','🎭','🍦','🛶','🌸','🏔️'];
   let selectedEmoji = EMOJIS[0];
   let filter = 'all';
+  let items = [];
 
-  // Default starter items
-  const DEFAULTS = [
-    { id: 1, title: 'Samen gaan kamperen', emoji: '🏕️', done: false },
-    { id: 2, title: 'Roadtrip maken', emoji: '🚗', done: false },
-    { id: 3, title: 'Uit eten gaan', emoji: '🍽️', done: false },
-    { id: 4, title: 'In het bos wandelen', emoji: '🌲', done: false },
-  ];
-
-  function load() {
-    const raw = localStorage.getItem('date-items');
-    return raw ? JSON.parse(raw) : DEFAULTS;
-  }
-  function save(items) {
-    localStorage.setItem('date-items', JSON.stringify(items));
+  // ── JSONBin lezen ──
+  async function load() {
+    document.getElementById('grid').innerHTML = `<div class="empty"><span>🌿</span>Laden…</div>`;
+    try {
+      const res  = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
+      const data = await res.json();
+      items = Array.isArray(data.record) ? data.record : [];
+    } catch (e) {
+      console.error('Laden mislukt', e);
+    }
+    render();
   }
 
-  // Build emoji picker
+  // ── JSONBin opslaan ──
+  async function save() {
+    try {
+      await fetch(BIN_URL, {
+        method: 'PUT',
+        headers: HEADERS,
+        body: JSON.stringify(items)
+      });
+    } catch (e) {
+      console.error('Opslaan mislukt', e);
+    }
+  }
+
+  // ── Emoji picker ──
   const pick = document.getElementById('emojiPick');
   EMOJIS.forEach(e => {
     const btn = document.createElement('button');
@@ -82,47 +97,42 @@
     render();
   }
 
-  function addItem() {
+  async function addItem() {
     const input = document.getElementById('titleInput');
     const title = input.value.trim();
     if (!title) { input.focus(); return; }
-    const items = load();
     items.unshift({ id: Date.now(), title, emoji: selectedEmoji, done: false });
-    save(items);
     input.value = '';
     render();
+    await save();
   }
 
   document.getElementById('titleInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') addItem();
   });
 
-  function toggleDone(id) {
-    const items = load();
+  async function toggleDone(id) {
     const item = items.find(i => i.id === id);
     if (item) item.done = !item.done;
-    save(items);
     render();
+    await save();
   }
 
-  function deleteItem(id) {
-    let items = load();
+  async function deleteItem(id) {
     items = items.filter(i => i.id !== id);
-    save(items);
     render();
+    await save();
   }
 
   function render() {
-    const all = load();
-    const done = all.filter(i => i.done).length;
-    const total = all.length;
-
+    const done  = items.filter(i => i.done).length;
+    const total = items.length;
     document.getElementById('stats').innerHTML =
       `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd`;
 
-    let visible = all;
-    if (filter === 'todo') visible = all.filter(i => !i.done);
-    if (filter === 'done') visible = all.filter(i => i.done);
+    let visible = items;
+    if (filter === 'todo') visible = items.filter(i => !i.done);
+    if (filter === 'done') visible = items.filter(i => i.done);
 
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
@@ -155,7 +165,9 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  render();
+  // Laad bij openen + ververs automatisch elke 30 seconden
+  load();
+  setInterval(load, 30000);
 </script>
 </body>
 </html>
