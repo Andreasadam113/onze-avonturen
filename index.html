@@ -47,15 +47,21 @@
 
   const EMOJIS = ['🏕️','🚗','🍽️','🌲','🏖️','🎡','🎬','🧁','🚴','🌅','⛵','🎭','🍦','🛶','🌸','🏔️'];
   const DRAFT_KEY = 'onze-avonturen-draft';
+  const POLL_FAST_MS = 2500;
+  const POLL_SLOW_MS = 10000;
+  const POLL_ERROR_MS = 20000;
   let selectedEmoji = EMOJIS[0];
   let filter = 'all';
   let items = [];
   let isLoading = false;
+  let isSaving = false;
   let loadStatus = '';
+  let pollTimer = null;
+  let loadFailures = 0;
 
   // ── JSONBin lezen ──
   async function load() {
-    if (isLoading) return;
+    if (isLoading || isSaving) return;
     isLoading = true;
     loadStatus = items.length === 0 ? 'Laden…' : 'Bijwerken…';
     render();
@@ -65,7 +71,9 @@
       if (Array.isArray(data.record)) {
         items = data.record;
       }
+      loadFailures = 0;
     } catch (e) {
+      loadFailures += 1;
       console.error('Laden mislukt', e);
     }
     isLoading = false;
@@ -75,6 +83,8 @@
 
   // ── JSONBin opslaan ──
   async function save() {
+    if (isSaving) return;
+    isSaving = true;
     try {
       await fetch(BIN_URL, {
         method: 'PUT',
@@ -83,7 +93,24 @@
       });
     } catch (e) {
       console.error('Opslaan mislukt', e);
+    } finally {
+      isSaving = false;
+      scheduleNextLoad(600);
     }
+  }
+
+  function getPollDelay() {
+    if (document.hidden) return POLL_SLOW_MS;
+    if (loadFailures > 0) return POLL_ERROR_MS;
+    return POLL_FAST_MS;
+  }
+
+  function scheduleNextLoad(delay = getPollDelay()) {
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = setTimeout(async () => {
+      await load();
+      scheduleNextLoad();
+    }, delay);
   }
 
   // ── Emoji picker ──
@@ -185,9 +212,22 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // Laad bij openen + ververs automatisch elke 30 seconden
-  load();
-  setInterval(load, 30000);
+  // Start met laden en houd de lijst bijna realtime gesynchroniseerd.
+  load().finally(() => scheduleNextLoad());
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      load();
+    }
+    scheduleNextLoad();
+  });
+  window.addEventListener('focus', () => {
+    load();
+    scheduleNextLoad();
+  });
+  window.addEventListener('online', () => {
+    load();
+    scheduleNextLoad();
+  });
 </script>
 </body>
 </html>
