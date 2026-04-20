@@ -50,17 +50,26 @@
   let selectedEmoji = EMOJIS[0];
   let filter = 'all';
   let items = [];
+  let isLoading = false;
 
   // ── JSONBin lezen ──
   async function load() {
-    document.getElementById('grid').innerHTML = `<div class="empty"><span>🌿</span>Laden…</div>`;
+    if (isLoading) return;
+    isLoading = true;
+    const grid = document.getElementById('grid');
+    if (items.length === 0) {
+      grid.innerHTML = `<div class="empty"><span>🌿</span>Laden…</div>`;
+    }
     try {
       const res  = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
       const data = await res.json();
-      items = Array.isArray(data.record) ? data.record : [];
+      if (Array.isArray(data.record)) {
+        items = data.record;
+      }
     } catch (e) {
       console.error('Laden mislukt', e);
     }
+    isLoading = false;
     render();
   }
 
