@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Onze Avonturen 🌿</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lato:wght@300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <div class="header-deco">✦ ✦ ✦</div>
+  <h1>Onze <em>Avonturen</em></h1>
+  <p>Een lijstje voor ons twee 🌿</p>
+</header>
+
+<div class="divider"><span>❧</span></div>
+
+<div class="add-section">
+  <div class="add-box">
+    <h2>Voeg een avontuur toe</h2>
+    <div class="emoji-pick" id="emojiPick"></div>
+    <div class="form-row">
+      <input type="text" id="titleInput" placeholder="Bijv. Kamperen in de Ardennen…" maxlength="80" />
+      <button class="btn-add" onclick="addItem()">Toevoegen</button>
+    </div>
+  </div>
+</div>
+
+<div class="filter-row">
+  <button class="filter-btn active" onclick="setFilter('all', this)">Alles</button>
+  <button class="filter-btn" onclick="setFilter('todo', this)">Nog te doen</button>
+  <button class="filter-btn" onclick="setFilter('done', this)">Gedaan 🎉</button>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="grid" id="grid"></div>
+
+<footer>Gemaakt met ❤︎ voor ons</footer>
+
+<script>
+  const EMOJIS = ['🏕️','🚗','🍽️','🌲','🏖️','🎡','🎬','🧁','🚴','🌅','⛵','🎭','🍦','🛶','🌸','🏔️'];
+  let selectedEmoji = EMOJIS[0];
+  let filter = 'all';
+
+  // Default starter items
+  const DEFAULTS = [
+    { id: 1, title: 'Samen gaan kamperen', emoji: '🏕️', done: false },
+    { id: 2, title: 'Roadtrip maken', emoji: '🚗', done: false },
+    { id: 3, title: 'Uit eten gaan', emoji: '🍽️', done: false },
+    { id: 4, title: 'In het bos wandelen', emoji: '🌲', done: false },
+  ];
+
+  function load() {
+    const raw = localStorage.getItem('date-items');
+    return raw ? JSON.parse(raw) : DEFAULTS;
+  }
+  function save(items) {
+    localStorage.setItem('date-items', JSON.stringify(items));
+  }
+
+  // Build emoji picker
+  const pick = document.getElementById('emojiPick');
+  EMOJIS.forEach(e => {
+    const btn = document.createElement('button');
+    btn.className = 'emoji-btn' + (e === selectedEmoji ? ' active' : '');
+    btn.textContent = e;
+    btn.onclick = () => {
+      selectedEmoji = e;
+      document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+    pick.appendChild(btn);
+  });
+
+  function setFilter(f, el) {
+    filter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    render();
+  }
+
+  function addItem() {
+    const input = document.getElementById('titleInput');
+    const title = input.value.trim();
+    if (!title) { input.focus(); return; }
+    const items = load();
+    items.unshift({ id: Date.now(), title, emoji: selectedEmoji, done: false });
+    save(items);
+    input.value = '';
+    render();
+  }
+
+  document.getElementById('titleInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addItem();
+  });
+
+  function toggleDone(id) {
+    const items = load();
+    const item = items.find(i => i.id === id);
+    if (item) item.done = !item.done;
+    save(items);
+    render();
+  }
+
+  function deleteItem(id) {
+    let items = load();
+    items = items.filter(i => i.id !== id);
+    save(items);
+    render();
+  }
+
+  function render() {
+    const all = load();
+    const done = all.filter(i => i.done).length;
+    const total = all.length;
+
+    document.getElementById('stats').innerHTML =
+      `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd`;
+
+    let visible = all;
+    if (filter === 'todo') visible = all.filter(i => !i.done);
+    if (filter === 'done') visible = all.filter(i => i.done);
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    if (visible.length === 0) {
+      grid.innerHTML = `<div class="empty"><span>🌿</span>Nog niets hier…</div>`;
+      return;
+    }
+
+    visible.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'card' + (item.done ? ' done' : '');
+      card.style.animationDelay = (idx * 0.05) + 's';
+      card.innerHTML = `
+        <div class="done-badge">✓</div>
+        <span class="card-emoji">${item.emoji}</span>
+        <div class="card-title">${escHtml(item.title)}</div>
+        <div class="card-footer">
+          <button class="check-btn" onclick="toggleDone(${item.id})">
+            ${item.done ? '✓ Gedaan!' : '○ Doen'}
+          </button>
+          <button class="delete-btn" onclick="deleteItem(${item.id})" title="Verwijderen">✕</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  render();
+</script>
+</body>
+</html>
