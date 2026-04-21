@@ -42,6 +42,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
+  (() => {
   const EMOJIS = ['🏕️','🚗','🍽️','🌲','🏖️','🎡','🎬','🧁','🚴','🌅','⛵','🎭','🍦','🛶','🌸','🏔️'];
   const DRAFT_KEY = 'onze-avonturen-draft';
   const SUPABASE_URL = window.APP_CONFIG?.SUPABASE_URL || '';
@@ -51,6 +52,7 @@
   let filter = 'all';
   let items = [];
   let loadStatus = 'Config nodig';
+  const visibleLoadStatuses = new Set(['Verbinden…', 'Laden…', 'Bijwerken…']);
 
   const hasSupabaseConfig =
     SUPABASE_URL.startsWith('https://') &&
@@ -79,7 +81,7 @@
     }
 
     items = Array.isArray(data) ? data : [];
-    loadStatus = 'Live';
+    loadStatus = '';
     render();
   }
 
@@ -97,11 +99,11 @@
       )
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
-          loadStatus = 'Live';
+          loadStatus = '';
           render();
         }
         if (status === 'CHANNEL_ERROR') {
-          loadStatus = 'Offline';
+          loadStatus = '';
           render();
         }
       });
@@ -150,7 +152,7 @@
 
     input.value = '';
     localStorage.removeItem(DRAFT_KEY);
-    loadStatus = 'Live';
+    loadStatus = '';
     render();
   }
 
@@ -202,8 +204,9 @@
   function render() {
     const done = items.filter(i => i.done).length;
     const total = items.length;
+    const statusLabel = visibleLoadStatuses.has(loadStatus) ? loadStatus : '';
     document.getElementById('stats').innerHTML =
-      `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd${loadStatus ? ` <span class="load-status">${loadStatus}</span>` : ''}`;
+      `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd${statusLabel ? ` <span class="load-status">${statusLabel}</span>` : ''}`;
 
     let visible = items;
     if (filter === 'todo') visible = items.filter(i => !i.done);
@@ -249,6 +252,12 @@
     fetchItems();
     setupRealtime();
   }
+
+  window.addItem = addItem;
+  window.setFilter = setFilter;
+  window.toggleDone = toggleDone;
+  window.deleteItem = deleteItem;
+  })();
 </script>
 </body>
 </html>
