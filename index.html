@@ -39,78 +39,72 @@
 
 <footer>Gemaakt met ❤︎ voor ons</footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
-  const BIN_ID  = '69e6955a856a6821895533b6';
-  const API_KEY = '$2a$10$vui16SKvJgX7XGY9qghvoO03Q/7LNIXUpJrjYArSHbd4TV7kN4ymu';
-  const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
-  const HEADERS = { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY };
-
   const EMOJIS = ['🏕️','🚗','🍽️','🌲','🏖️','🎡','🎬','🧁','🚴','🌅','⛵','🎭','🍦','🛶','🌸','🏔️'];
   const DRAFT_KEY = 'onze-avonturen-draft';
-  const POLL_FAST_MS = 2500;
-  const POLL_SLOW_MS = 10000;
-  const POLL_ERROR_MS = 20000;
+  const SUPABASE_URL = window.APP_CONFIG?.SUPABASE_URL || '';
+  const SUPABASE_ANON_KEY = window.APP_CONFIG?.SUPABASE_ANON_KEY || '';
+
   let selectedEmoji = EMOJIS[0];
   let filter = 'all';
   let items = [];
-  let isLoading = false;
-  let isSaving = false;
-  let loadStatus = '';
-  let pollTimer = null;
-  let loadFailures = 0;
+  let loadStatus = 'Config nodig';
 
-  // ── JSONBin lezen ──
-  async function load() {
-    if (isLoading || isSaving) return;
-    isLoading = true;
-    loadStatus = items.length === 0 ? 'Laden…' : 'Bijwerken…';
+  const hasSupabaseConfig =
+    SUPABASE_URL.startsWith('https://') &&
+    SUPABASE_URL.includes('.supabase.co') &&
+    SUPABASE_ANON_KEY.length > 20;
+
+  const supabase = hasSupabaseConfig
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  async function fetchItems() {
+    if (!supabase) return;
+    loadStatus = items.length ? 'Bijwerken…' : 'Laden…';
     render();
-    try {
-      const res  = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
-      const data = await res.json();
-      if (Array.isArray(data.record)) {
-        items = data.record;
-      }
-      loadFailures = 0;
-    } catch (e) {
-      loadFailures += 1;
-      console.error('Laden mislukt', e);
+
+    const { data, error } = await supabase
+      .from('avonturen')
+      .select('id, title, emoji, done, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Laden mislukt', error);
+      loadStatus = 'Fout';
+      render();
+      return;
     }
-    isLoading = false;
-    loadStatus = '';
+
+    items = Array.isArray(data) ? data : [];
+    loadStatus = 'Live';
     render();
   }
 
-  // ── JSONBin opslaan ──
-  async function save() {
-    if (isSaving) return;
-    isSaving = true;
-    try {
-      await fetch(BIN_URL, {
-        method: 'PUT',
-        headers: HEADERS,
-        body: JSON.stringify(items)
+  function setupRealtime() {
+    if (!supabase) return;
+
+    supabase
+      .channel('avonturen-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'avonturen' },
+        () => {
+          fetchItems();
+        }
+      )
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          loadStatus = 'Live';
+          render();
+        }
+        if (status === 'CHANNEL_ERROR') {
+          loadStatus = 'Offline';
+          render();
+        }
       });
-    } catch (e) {
-      console.error('Opslaan mislukt', e);
-    } finally {
-      isSaving = false;
-      scheduleNextLoad(600);
-    }
-  }
-
-  function getPollDelay() {
-    if (document.hidden) return POLL_SLOW_MS;
-    if (loadFailures > 0) return POLL_ERROR_MS;
-    return POLL_FAST_MS;
-  }
-
-  function scheduleNextLoad(delay = getPollDelay()) {
-    if (pollTimer) clearTimeout(pollTimer);
-    pollTimer = setTimeout(async () => {
-      await load();
-      scheduleNextLoad();
-    }, delay);
   }
 
   // ── Emoji picker ──
@@ -135,14 +129,29 @@
   }
 
   async function addItem() {
+    if (!supabase) return;
     const input = document.getElementById('titleInput');
     const title = input.value.trim();
     if (!title) { input.focus(); return; }
-    items.unshift({ id: Date.now(), title, emoji: selectedEmoji, done: false });
+
+    const payload = {
+      title: title.slice(0, 80),
+      emoji: selectedEmoji,
+      done: false
+    };
+
+    const { error } = await supabase.from('avonturen').insert(payload);
+    if (error) {
+      console.error('Toevoegen mislukt', error);
+      loadStatus = 'Fout';
+      render();
+      return;
+    }
+
     input.value = '';
     localStorage.removeItem(DRAFT_KEY);
+    loadStatus = 'Live';
     render();
-    await save();
   }
 
   const titleInput = document.getElementById('titleInput');
@@ -155,24 +164,43 @@
   });
 
   async function toggleDone(id) {
+    if (!supabase) return;
     const item = items.find(i => i.id === id);
-    if (item) item.done = !item.done;
-    render();
-    await save();
+    if (!item) return;
+
+    const { error } = await supabase
+      .from('avonturen')
+      .update({ done: !item.done })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Bijwerken mislukt', error);
+      loadStatus = 'Fout';
+      render();
+    }
   }
 
   async function deleteItem(id) {
+    if (!supabase) return;
     const item = items.find(i => i.id === id);
     if (!item) return;
     const confirmed = confirm(`Weet je zeker dat je “${item.title}” wilt verwijderen?`);
     if (!confirmed) return;
-    items = items.filter(i => i.id !== id);
-    render();
-    await save();
+
+    const { error } = await supabase
+      .from('avonturen')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Verwijderen mislukt', error);
+      loadStatus = 'Fout';
+      render();
+    }
   }
 
   function render() {
-    const done  = items.filter(i => i.done).length;
+    const done = items.filter(i => i.done).length;
     const total = items.length;
     document.getElementById('stats').innerHTML =
       `<strong>${done}</strong> van <strong>${total}</strong> avonturen beleefd${loadStatus ? ` <span class="load-status">${loadStatus}</span>` : ''}`;
@@ -198,10 +226,10 @@
         <span class="card-emoji">${item.emoji}</span>
         <div class="card-title">${escHtml(item.title)}</div>
         <div class="card-footer">
-          <button class="check-btn" onclick="toggleDone(${item.id})">
+          <button class="check-btn" onclick='toggleDone(${JSON.stringify(item.id)})'>
             ${item.done ? '✓ Gedaan!' : '○ Doen'}
           </button>
-          <button class="delete-btn" onclick="deleteItem(${item.id})" title="Verwijderen">✕</button>
+          <button class="delete-btn" onclick='deleteItem(${JSON.stringify(item.id)})' title="Verwijderen">✕</button>
         </div>
       `;
       grid.appendChild(card);
@@ -209,25 +237,18 @@
   }
 
   function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // Start met laden en houd de lijst bijna realtime gesynchroniseerd.
-  load().finally(() => scheduleNextLoad());
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      load();
-    }
-    scheduleNextLoad();
-  });
-  window.addEventListener('focus', () => {
-    load();
-    scheduleNextLoad();
-  });
-  window.addEventListener('online', () => {
-    load();
-    scheduleNextLoad();
-  });
+  if (!supabase) {
+    loadStatus = 'Config nodig';
+    render();
+  } else {
+    loadStatus = 'Verbinden…';
+    render();
+    fetchItems();
+    setupRealtime();
+  }
 </script>
 </body>
 </html>
