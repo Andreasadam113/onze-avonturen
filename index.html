@@ -37,6 +37,17 @@
 <div class="stats" id="stats"></div>
 <div class="grid" id="grid"></div>
 
+<div class="modal-backdrop" id="deleteModal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+    <h3 id="deleteModalTitle">Avontuur verwijderen?</h3>
+    <p id="deleteModalText">Deze actie kan je niet ongedaan maken.</p>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-secondary" id="cancelDeleteBtn" type="button">Annuleren</button>
+      <button class="modal-btn modal-btn-danger" id="confirmDeleteBtn" type="button">Verwijderen</button>
+    </div>
+  </div>
+</div>
+
 <footer>Gemaakt met ❤︎ voor ons</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -51,8 +62,14 @@
   let selectedEmoji = EMOJIS[0];
   let filter = 'all';
   let items = [];
+  let pendingDeleteId = null;
   let loadStatus = 'Config nodig';
   const visibleLoadStatuses = new Set(['Verbinden…', 'Laden…', 'Bijwerken…']);
+
+  const deleteModal = document.getElementById('deleteModal');
+  const deleteModalText = document.getElementById('deleteModalText');
+  const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+  const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
   const hasSupabaseConfig =
     SUPABASE_URL.startsWith('https://') &&
@@ -182,12 +199,30 @@
     }
   }
 
-  async function deleteItem(id) {
-    if (!supabase) return;
+  function openDeleteModal(id) {
     const item = items.find(i => i.id === id);
     if (!item) return;
-    const confirmed = confirm(`Weet je zeker dat je “${item.title}” wilt verwijderen?`);
-    if (!confirmed) return;
+    pendingDeleteId = id;
+    deleteModalText.textContent = `Weet je zeker dat je "${item.title}" wilt verwijderen?`;
+    deleteModal.classList.add('open');
+    deleteModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDeleteModal() {
+    pendingDeleteId = null;
+    deleteModal.classList.remove('open');
+    deleteModal.setAttribute('aria-hidden', 'true');
+  }
+
+  async function confirmDeleteItem() {
+    const id = pendingDeleteId;
+    if (!supabase || !id) return;
+    if (!supabase) return;
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      closeDeleteModal();
+      return;
+    }
 
     const { error } = await supabase
       .from('avonturen')
@@ -199,6 +234,8 @@
       loadStatus = 'Fout';
       render();
     }
+
+    closeDeleteModal();
   }
 
   function render() {
@@ -232,7 +269,7 @@
           <button class="check-btn" onclick='toggleDone(${JSON.stringify(item.id)})'>
             ${item.done ? '✓ Gedaan!' : '○ Doen'}
           </button>
-          <button class="delete-btn" onclick='deleteItem(${JSON.stringify(item.id)})' title="Verwijderen">✕</button>
+          <button class="delete-btn" onclick='openDeleteModal(${JSON.stringify(item.id)})' title="Verwijderen">✕</button>
         </div>
       `;
       grid.appendChild(card);
@@ -256,7 +293,18 @@
   window.addItem = addItem;
   window.setFilter = setFilter;
   window.toggleDone = toggleDone;
-  window.deleteItem = deleteItem;
+  window.openDeleteModal = openDeleteModal;
+
+  cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+  confirmDeleteBtn.addEventListener('click', confirmDeleteItem);
+  deleteModal.addEventListener('click', e => {
+    if (e.target === deleteModal) closeDeleteModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && deleteModal.classList.contains('open')) {
+      closeDeleteModal();
+    }
+  });
   })();
 </script>
 </body>
